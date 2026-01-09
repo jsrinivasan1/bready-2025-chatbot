@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8">
+<title>Help – B-READY Chatbot</title>
+<style>
+body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:24px;line-height:1.4;max-width:900px}
+code,pre{background:#f6f8fa;padding:2px 6px;border-radius:6px}
+pre{padding:12px;overflow:auto}
+</style>
+<h1>Help – B-READY 2025 Chatbot</h1>
+<p>This site answers questions using the Business Ready 2025 dataset you provided.</p>
+<h2>Enable full chat</h2>
+<p>Set the environment variable <code>OPENAI_API_KEY</code> in Netlify (Site settings → Environment variables). The API key must be server-side; never put it in browser code.</p>
+<h2>How answers are grounded</h2>
+<p>The function retrieves the most relevant dataset rows and sends them as context to the model. Citations like <code>(E3)</code> or <code>(S2)</code> refer to those retrieved rows.</p>
+<h2>Example questions</h2>
+<ul>
+<li>Business Location overall score for Rwanda</li>
+<li>For Nigeria, what does the dataset say about land registry digital services?</li>
+<li>Compare Business Entry overall between Vietnam and Indonesia</li>
+</ul>

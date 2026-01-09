@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>B-READY 2025 Data Chatbot</title>
+  <link rel="stylesheet" href="/assets/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">B</div>
+      <div>
+        <div class="title">Business Ready 2025 – Data Chatbot</div>
+        <div class="subtitle">Ask questions across economies and topics. Answers are grounded in the dataset.</div>
+      </div>
+    </div>
+    <div class="right">
+      <a class="link" href="/README.html" target="_blank" rel="noopener">Help</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel">
+      <h2>Tips</h2>
+      <ul>
+        <li>Ask by economy: <span class="mono">“What does Rwanda report on building permit timelines?”</span></li>
+        <li>Ask by topic: <span class="mono">“Business Location score for Kenya”</span></li>
+        <li>Ask by variable: <span class="mono">“BL_2.2.1 registry interoperability”</span></li>
+      </ul>
+
+      <h2>Quick prompts</h2>
+      <div class="chips" id="chips"></div>
+
+      <div class="note">
+        <strong>Privacy:</strong> Your OpenAI API key is stored on the server (Netlify env var) — never in your browser.
+      </div>
+    </aside>
+
+    <section class="chat">
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <form id="chatForm" class="composer" autocomplete="off">
+        <input id="chatInput" type="text" placeholder="Ask a question about the B-READY 2025 data…" />
+        <button id="sendBtn" type="submit">Send</button>
+      </form>
+
+      <div class="foot">
+        <span>Grounded answers + citations from dataset rows. If an answer is uncertain, the bot will say so.</span>
+      </div>
+    </section>
+  </main>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
