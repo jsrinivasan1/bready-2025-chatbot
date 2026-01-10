@@ -5,8 +5,11 @@
 
 [build.environment]
   NODE_VERSION = "18"
+
 [functions]
   node_bundler = "none"
- included_files = ["data/*.gz"]
-node_bundler = "none"
   included_files = ["netlify/functions/data/*.gz"]
+
+[dev]
+  command = "npm run dev"
+  port = 8888
