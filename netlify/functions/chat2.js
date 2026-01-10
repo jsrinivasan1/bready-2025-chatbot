@@ -141,7 +141,10 @@ async function searchGzJsonl(filePath, query, opts) {
       }
 
       if (opts.topic && row.topic && String(row.topic).toLowerCase() !== String(opts.topic).toLowerCase()) return;
-      if (opts.economy && row.economy && String(row.economy).toLowerCase() !== String(opts.economy).toLowerCase()) return;
+if (opts.economy) {
+  const rowEconomy = (row.economy || row.Economy || "").toString().toLowerCase();
+  if (rowEconomy && rowEconomy !== String(opts.economy).toLowerCase()) return;
+}
 
       const hay = [
         row.economy, row.topic, row.var, row.question, row.response,
@@ -260,6 +263,19 @@ async function callOpenAI(question, history, context) {
   const answer = parts.join("\n").trim();
   return answer || "(No text output)";
 }
+function detectEconomySimple(question) {
+  const q = String(question || "").trim();
+
+  // Match: "For Nigeria, ..." or "Nigeria: ..."
+  let m = q.match(/^(?:for\s+)?([A-Za-z][A-Za-z\s\.\-']{2,})[:,]/i);
+  if (m) return m[1].trim();
+
+  // Match: "in Nigeria" / "of Nigeria"
+  m = q.match(/\b(?:in|of|for)\s+([A-Za-z][A-Za-z\s\.\-']{2,})\b/i);
+  if (m) return m[1].trim();
+
+  return null;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -296,12 +312,14 @@ exports.handler = async (event) => {
   
   console.log("DEBUG typeof loadEconomySetFromScores =", typeof loadEconomySetFromScores);
 // Detect economy and topic from the question
-  const economySet = await loadEconomySetFromScores(scorePath);
-  const detectedEconomy = detectEconomy(message, economySet);
-  const detectedTopic = detectTopic(message);
 
-  // Remove economy name from query text so scoring focuses on content
-  const msgForScoring = removeEconomyFromQueryTokens(message, detectedEconomy);
+const detectedEconomyRaw = detectEconomySimple(message);
+const detectedEconomy = detectedEconomyRaw ? detectedEconomyRaw.toLowerCase() : null;
+const detectedTopic = detectTopic(message);
+
+const msgForScoring = detectedEconomyRaw
+  ? message.replace(new RegExp(detectedEconomyRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ")
+  : message;
 
       const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
       maxRows: 10,
