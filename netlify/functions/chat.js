@@ -194,7 +194,8 @@ exports.handler = async (event) => {
 
     const context = buildContext(econMatches, scoreMatches);
 
-    // No key? Return a deterministic, grounded fallback.
+ const econPath = path.join(__dirname, "..", "..", "data", "econ_answers.j>
+  const scorePath = path.join(__dirname, "..", "..", "data", "topic_scores.>    // No key? Return a deterministic, grounded fallback.
     if (!OPENAI_API_KEY) {
       const fallback =
         "OPENAI_API_KEY is not set on the server, so I can’t generate a natural-language answer yet.\n\n" +

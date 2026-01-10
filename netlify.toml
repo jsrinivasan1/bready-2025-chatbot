@@ -8,3 +8,8 @@
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Referrer-Policy = "no-referrer"
+
+[build]
+  command = "bash build.sh"
+  publish = "."
+  functions = "netlify/functions"
