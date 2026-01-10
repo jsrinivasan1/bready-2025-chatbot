@@ -299,6 +299,30 @@ function detectTopic(question) {
 
   return null;
 }
+async function getTopicScoreRow(scorePath, economyName, topicName) {
+  const { rl } = openGzLineReader(scorePath);
+
+  const econNeedle = String(economyName || "").toLowerCase();
+  const topicNeedle = String(topicName || "").toLowerCase();
+
+  return await new Promise((resolve, reject) => {
+    rl.on("line", (line) => {
+      if (!line) return;
+      let row;
+      try { row = JSON.parse(line); } catch { return; }
+
+      const econ = (row.Economy || row.economy || "").toString().toLowerCase();
+      const topic = (row.topic || "").toString().toLowerCase();
+
+      if (econ === econNeedle && (!topicNeedle || topic === topicNeedle)) {
+        resolve(row);
+        rl.close();
+      }
+    });
+    rl.on("close", () => resolve(null));
+    rl.on("error", reject);
+  });
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -339,6 +363,56 @@ exports.handler = async (event) => {
 const detectedEconomyRaw = detectEconomySimple(message);
 const detectedEconomy = detectedEconomyRaw ? detectedEconomyRaw.toLowerCase() : null;
 const detectedTopic = detectTopic(message);
+const wantsOverall =
+  /overall\s+score|overall|score\b|index\b/i.test(message) &&
+  (detectedTopic === "Business Location" || /business\s+location|property\s+transfer/i.test(message));
+if (wantsOverall && detectedEconomy) {
+  const scoreRow = await getTopicScoreRow(scorePath, detectedEconomy, detectedTopic);
+
+  if (!scoreRow) {
+    return json(200, {
+      answer:
+        `I couldn’t find a topic score row for Economy="${detectedEconomy}" and Topic="${detectedTopic}". ` +
+        `Try using the exact economy name as in the dataset.`
+    });
+  }
+
+  // Find a likely "overall" field in the row
+  const overallKeys = Object.keys(scoreRow).filter(k => k.toLowerCase().includes("overall"));
+  const overall = overallKeys.length ? scoreRow[overallKeys[0]] : null;
+
+  return json(200, {
+    answer:
+      `**${detectedEconomy} — ${detectedTopic}**\n` +
+      (overall !== null ? `Overall: ${overall}\n` : `I found the score row, but no field containing "overall".\n`) +
+      `Fields with "overall": ${overallKeys.join(", ") || "(none)"}`
+  });
+}
+  const wantsOverall =
+    /overall\s+score|overall\b|score\b|index\b/i.test(message) &&
+    (detectedTopic === "Business Location" || /business\s+location|property\s+transfer/i.test(message));
+
+  if (wantsOverall && detectedEconomy) {
+    const scoreRow = await getTopicScoreRow(scorePath, detectedEconomy, detectedTopic);
+
+    if (!scoreRow) {
+      return json(200, {
+        answer:
+          `I couldn’t find a topic score row for Economy="${detectedEconomy}" and Topic="${detectedTopic}". ` +
+          `Try using the exact economy name as in the dataset.`
+      });
+    }
+
+    const overallKeys = Object.keys(scoreRow).filter(k => k.toLowerCase().includes("overall"));
+    const overall = overallKeys.length ? scoreRow[overallKeys[0]] : null;
+
+    return json(200, {
+      answer:
+        `**${detectedEconomy} — ${detectedTopic}**\n` +
+        (overall !== null ? `Overall: ${overall}\n` : `I found the score row, but no field containing "overall".\n`) +
+        `Fields with "overall": ${overallKeys.join(", ") || "(none)"}`
+    });
+  }
 
 const msgForScoring = detectedEconomyRaw
   ? message.replace(new RegExp(detectedEconomyRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ")
