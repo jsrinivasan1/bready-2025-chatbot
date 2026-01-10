@@ -276,6 +276,29 @@ function detectEconomySimple(question) {
 
   return null;
 }
+function detectTopic(question) {
+  const q = String(question || "").toLowerCase();
+
+  // Business Location / Property Transfer / land registry phrasing
+  if (
+    q.includes("business location") ||
+    q.includes("property transfer") ||
+    q.includes("land registry") ||
+    q.includes("land registration") ||
+    q.includes("title registry") ||
+    q.includes("cadastre") ||
+    q.includes("registry")
+  ) {
+    return "Business Location";
+  }
+
+  if (q.includes("business entry")) return "Business Entry";
+  if (q.includes("labor") || q.includes("employment")) return "Labor";
+  if (q.includes("utility") || q.includes("electric") || q.includes("water")) return "Utility Services";
+  if (q.includes("tax")) return "Taxation";
+
+  return null;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
