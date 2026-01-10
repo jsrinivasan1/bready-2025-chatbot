@@ -110,7 +110,7 @@ function buildContext(econMatches, scoreMatches) {
     econMatches.forEach((m, i) => {
       const r = m.row;
       const snippet = (r.response || "").toString().slice(0, 400);
-      out += `E${i+1}. Economy=${r.economy}; Topic=${r.topic}; Var=${r.var}; Q=${r.question}; A=${snippet}${(r.response||"").length>400?"…":""}\n`;
+      out += `E${i+1}. Economy=${r.economy}; Topic=${r.topic}; Var=${r.var}; Q=${r.question}; A=${snippet}${(r.response||"").length>400?"...":""}\n`;
     });
   }
 
@@ -198,7 +198,8 @@ exports.handler = async (event) => {
   const scorePath = path.join(__dirname, "..", "..", "data", "topic_scores.>    // No key? Return a deterministic, grounded fallback.
     if (!OPENAI_API_KEY) {
       const fallback =
-        "OPENAI_API_KEY is not set on the server, so I can’t generate a natural-language answer yet.\n\n" +
+        "OPENAI_API_KEY is not set on the server, so I can'
+t generate a natural-language answer yet.\n\n" +
         "Here are the most relevant dataset rows I found (use these to answer manually, or set the env var to enable full chat):\n\n" +
         context;
       return { statusCode: 200, headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ answer: fallback }) };
