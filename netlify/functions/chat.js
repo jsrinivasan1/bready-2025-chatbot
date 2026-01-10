@@ -35,6 +35,75 @@ function tokenize(q) {
 
 function scoreText(hay, tokens) {
   if (!hay) return 0;
+let ECONOMY_SET = null; // Set<string>, cached after first load
+
+function norm(s) {
+  return String(s || "").trim().toLowerCase();
+}
+
+async function loadEconomySetFromScores(scorePath) {
+  if (ECONOMY_SET) return ECONOMY_SET;
+
+  const set = new Set();
+  const { rl } = openGzLineReader(scorePath);
+
+  await new Promise((resolve, reject) => {
+    rl.on("line", (line) => {
+      if (!line) return;
+      let row;
+      try { row = JSON.parse(line); } catch { return; }
+      const econ = row.Economy || row.economy;
+      if (econ) set.add(norm(econ));
+    });
+    rl.on("close", resolve);
+    rl.on("error", reject);
+  });
+
+  ECONOMY_SET = set;
+  return ECONOMY_SET;
+}
+
+function detectEconomy(question, economySet) {
+  const q = norm(question);
+
+  // Prefer explicit patterns: "For Nigeria, ..." or "Nigeria:"
+  const m = q.match(/^(for\s+)?([a-z][a-z\s\.\-']{2,})[:,]/i);
+  if (m) {
+    const candidate = norm(m[2]);
+    if (economySet.has(candidate)) return candidate;
+  }
+
+  // Otherwise, find any economy name that appears as a whole phrase in the question.
+  // We prefer the longest match to avoid partial matches.
+  let best = "";
+  for (const econ of economySet) {
+    if (econ.length < 4) continue;
+    if (q.includes(econ) && econ.length > best.length) best = econ;
+  }
+  return best || null;
+}
+
+function detectTopic(question) {
+  const q = norm(question);
+  // Keep it conservative: only filter when very likely.
+  if (q.includes("business location") || q.includes("property transfer") || q.includes("land registry") || q.includes("land registration")) {
+    return "Business Location";
+  }
+  if (q.includes("business entry")) return "Business Entry";
+  if (q.includes("labor") || q.includes("employment")) return "Labor";
+  if (q.includes("utilities") || q.includes("electric") || q.includes("water")) return "Utility Services";
+  if (q.includes("tax")) return "Taxation";
+  // Add more topic hints if you want, but start small.
+  return null;
+}
+
+function removeEconomyFromQueryTokens(query, economy) {
+  if (!economy) return query;
+  const q = norm(query).replace(economy, " ");
+  return q;
+}
+
+
   const t = String(hay).toLowerCase();
   let s = 0;
   for (let i = 0; i < tokens.length; i++) {
@@ -222,9 +291,29 @@ exports.handler = async (event) => {
   const econPath = path.join(__dirname, "data", "econ_answers.jsonl.gz");
   const scorePath = path.join(__dirname, "data", "topic_scores.jsonl.gz");
 
+  // Detect economy and topic from the question
+  const economySet = await loadEconomySetFromScores(scorePath);
+  const detectedEconomy = detectEconomy(message, economySet);
+  const detectedTopic = detectTopic(message);
+
+  // Remove economy name from query text so scoring focuses on content
+  const msgForScoring = removeEconomyFromQueryTokens(message, detectedEconomy);
+
+
   try {
-    const scoreMatches = await searchGzJsonl(scorePath, message, { maxRows: 10, minScore: 1 });
-    const econMatches = await searchGzJsonl(econPath, message, { maxRows: 24, minScore: 2 });
+    const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
+      maxRows: 10,
+      minScore: 1,
+      economy: detectedEconomy,
+      topic: detectedTopic
+    });
+
+    const econMatches = await searchGzJsonl(econPath, msgForScoring, {
+      maxRows: 40,
+      minScore: 1,
+      economy: detectedEconomy,
+      topic: detectedTopic
+    });
 
     const context = buildContext(econMatches, scoreMatches);
 
