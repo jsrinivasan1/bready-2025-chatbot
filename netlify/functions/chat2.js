@@ -52,7 +52,8 @@ async function loadEconomySetFromScores(scorePath) {
       if (!line) return;
       let row;
       try { row = JSON.parse(line); } catch { return; }
-      const econ = row.Economy || row.economy;
+      
+const econ = row.Economy || row.economy;
       if (econ) set.add(norm(econ));
     });
     rl.on("close", resolve);
@@ -291,7 +292,10 @@ exports.handler = async (event) => {
   const econPath = path.join(__dirname, "data", "econ_answers.jsonl.gz");
   const scorePath = path.join(__dirname, "data", "topic_scores.jsonl.gz");
 
-  // Detect economy and topic from the question
+  try {
+  
+  console.log("DEBUG typeof loadEconomySetFromScores =", typeof loadEconomySetFromScores);
+// Detect economy and topic from the question
   const economySet = await loadEconomySetFromScores(scorePath);
   const detectedEconomy = detectEconomy(message, economySet);
   const detectedTopic = detectTopic(message);
@@ -299,9 +303,7 @@ exports.handler = async (event) => {
   // Remove economy name from query text so scoring focuses on content
   const msgForScoring = removeEconomyFromQueryTokens(message, detectedEconomy);
 
-
-  try {
-    const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
+      const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
       maxRows: 10,
       minScore: 1,
       economy: detectedEconomy,
@@ -327,7 +329,7 @@ exports.handler = async (event) => {
     }
 
     const answer = await callOpenAI(message, history, context);
-    return json(200, { answer: answer });
+   return json(200, { answer: answer });
   } catch (e) {
     return json(500, { error: String(e && e.message ? e.message : e) });
   }
