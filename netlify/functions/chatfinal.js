@@ -260,6 +260,7 @@ exports.handler = async (event) => {
 globalThis.__ECON_SET__ = globalThis.__ECON_SET__ || null;
 
 async function loadEconSetOnce() {
+
   if (globalThis.__ECON_SET__) return globalThis.__ECON_SET__;
 
   const set = new Set();
@@ -309,7 +310,6 @@ function pickEconomyFromQuestion(q, econSet) {
   return best || null;
 }
 
-const econSet = await loadEconSetOnce();
 const detectedEconomy = pickEconomyFromQuestion(message, econSet);
 
 // For scoring, remove the detected economy phrase (if any)
@@ -345,27 +345,6 @@ const msgForScoring = detectedEconomy
 // Build a real economy set from the scores file (cached per warm function)
 globalThis.__ECON_SET__ = globalThis.__ECON_SET__ || null;
 
-async function loadEconSetOnce() {
-  if (globalThis.__ECON_SET__) return globalThis.__ECON_SET__;
-
-  const set = new Set();
-  const { rl } = openGzLineReader(scorePath);
-
-  await new Promise((resolve, reject) => {
-    rl.on("line", (line) => {
-      if (!line) return;
-      let row;
-      try { row = JSON.parse(line); } catch { return; }
-      const econ = (row.Economy || row.economy || "").toString().trim().toLowerCase();
-      if (econ) set.add(econ);
-    });
-    rl.on("close", resolve);
-    rl.on("error", reject);
-  });
-
-  globalThis.__ECON_SET__ = set;
-  return set;
-}
 
 function pickEconomyFromQuestion(q, econSet) {
   const text = q.toLowerCase();
