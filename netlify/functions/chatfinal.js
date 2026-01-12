@@ -255,9 +255,67 @@ exports.handler = async (event) => {
   const scorePath = path.join(__dirname, "data", "topic_scores.jsonl.gz");
 
   try {
-    const econRaw = detectEconomySimple(message);
-    const detectedEconomy = econRaw ? econRaw.toLowerCase() : null;
     const detectedTopic = detectTopic(message);
+// Build a real economy set from the scores file (cached per warm function)
+globalThis.__ECON_SET__ = globalThis.__ECON_SET__ || null;
+
+async function loadEconSetOnce() {
+  if (globalThis.__ECON_SET__) return globalThis.__ECON_SET__;
+
+  const set = new Set();
+  const { rl } = openGzLineReader(scorePath);
+
+  await new Promise((resolve, reject) => {
+    rl.on("line", (line) => {
+      if (!line) return;
+      let row;
+      try { row = JSON.parse(line); } catch { return; }
+      const econ = (row.Economy || row.economy || "").toString().trim().toLowerCase();
+      if (econ) set.add(econ);
+    });
+    rl.on("close", resolve);
+    rl.on("error", reject);
+  });
+
+  globalThis.__ECON_SET__ = set;
+  return set;
+}
+
+function pickEconomyFromQuestion(q, econSet) {
+  const text = q.toLowerCase();
+
+  // Prefer "for X" / "in X" / "of X" at the END of the question
+  const tail = text.match(/\b(?:for|in|of)\s+([a-z][a-z\s\.\-']{2,})\s*\??\s*$/i);
+  if (tail) {
+    const cand = tail[1].trim().toLowerCase();
+    if (econSet.has(cand)) return cand;
+  }
+
+  // Also handle "X vs Y" / "X and Y" patterns (return first; compare can be added later)
+  const vs = text.match(/([a-z][a-z\s\.\-']{2,})\s+(?:vs\.?|versus|and)\s+([a-z][a-z\s\.\-']{2,})/i);
+  if (vs) {
+    const a = vs[1].trim().toLowerCase();
+    const b = vs[2].trim().toLowerCase();
+    if (econSet.has(a)) return a;
+    if (econSet.has(b)) return b;
+  }
+
+  // Finally: longest economy phrase contained anywhere in the question
+  let best = "";
+  for (const econ of econSet) {
+    if (econ.length < 4) continue;
+    if (text.includes(econ) && econ.length > best.length) best = econ;
+  }
+  return best || null;
+}
+
+const econSet = await loadEconSetOnce();
+const detectedEconomy = pickEconomyFromQuestion(message, econSet);
+
+// For scoring, remove the detected economy phrase (if any)
+const msgForScoring = detectedEconomy
+  ? message.replace(new RegExp(escapeRegExp(detectedEconomy), "ig"), " ")
+  : message;
 
     // For "overall score" queries, do direct lookup in topic scores
     const wantsOverall =
@@ -284,9 +342,62 @@ exports.handler = async (event) => {
       });
     }
 
-    const msgForScoring = econRaw
-      ? message.replace(new RegExp(escapeRegExp(econRaw), "ig"), " ")
-      : message;
+// Build a real economy set from the scores file (cached per warm function)
+globalThis.__ECON_SET__ = globalThis.__ECON_SET__ || null;
+
+async function loadEconSetOnce() {
+  if (globalThis.__ECON_SET__) return globalThis.__ECON_SET__;
+
+  const set = new Set();
+  const { rl } = openGzLineReader(scorePath);
+
+  await new Promise((resolve, reject) => {
+    rl.on("line", (line) => {
+      if (!line) return;
+      let row;
+      try { row = JSON.parse(line); } catch { return; }
+      const econ = (row.Economy || row.economy || "").toString().trim().toLowerCase();
+      if (econ) set.add(econ);
+    });
+    rl.on("close", resolve);
+    rl.on("error", reject);
+  });
+
+  globalThis.__ECON_SET__ = set;
+  return set;
+}
+
+function pickEconomyFromQuestion(q, econSet) {
+  const text = q.toLowerCase();
+
+  // Prefer "for X" / "in X" / "of X" at the END of the question
+  const tail = text.match(/\b(?:for|in|of)\s+([a-z][a-z\s\.\-']{2,})\s*\??\s*$/i);
+  if (tail) {
+    const cand = tail[1].trim().toLowerCase();
+    if (econSet.has(cand)) return cand;
+  }
+
+  // Also handle "X vs Y" / "X and Y" patterns (return first; compare can be added later)
+  const vs = text.match(/([a-z][a-z\s\.\-']{2,})\s+(?:vs\.?|versus|and)\s+([a-z][a-z\s\.\-']{2,})/i);
+  if (vs) {
+    const a = vs[1].trim().toLowerCase();
+    const b = vs[2].trim().toLowerCase();
+    if (econSet.has(a)) return a;
+    if (econSet.has(b)) return b;
+  }
+
+  // Finally: longest economy phrase contained anywhere in the question
+  let best = "";
+  for (const econ of econSet) {
+    if (econ.length < 4) continue;
+    if (text.includes(econ) && econ.length > best.length) best = econ;
+  }
+  return best || null;
+}
+
+const econSet = await loadEconSetOnce();
+
+// For scoring, remove the detected economy phrase (if any)
 
     const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
       maxRows: 10,
