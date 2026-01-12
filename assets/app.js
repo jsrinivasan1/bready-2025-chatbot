@@ -39,7 +39,7 @@ async function sendMessage(text) {
   input.disabled = true;
 
   try {
-    const res = await fetch('/.netlify/functions/chat2', {
+    const res = await fetch('/.netlify/functions/chatfinal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
