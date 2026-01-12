@@ -363,10 +363,10 @@ exports.handler = async (event) => {
 const detectedEconomyRaw = detectEconomySimple(message);
 const detectedEconomy = detectedEconomyRaw ? detectedEconomyRaw.toLowerCase() : null;
 const detectedTopic = detectTopic(message);
-const wantsOverall =
+const wantsOverallScore =
   /overall\s+score|overall|score\b|index\b/i.test(message) &&
   (detectedTopic === "Business Location" || /business\s+location|property\s+transfer/i.test(message));
-if (wantsOverall && detectedEconomy) {
+if (wantsOverallScore && detectedEconomy) {
   const scoreRow = await getTopicScoreRow(scorePath, detectedEconomy, detectedTopic);
 
   if (!scoreRow) {
