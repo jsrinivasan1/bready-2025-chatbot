@@ -161,28 +161,40 @@ function buildContext(econMatches, scoreMatches) {
   let out = "";
 
   if (scoreMatches && scoreMatches.length) {
-    out += "SCORES:\n";
+    out += "SCORES (Numeric Data):\n";
     scoreMatches.forEach((m, i) => {
       const r = m.row || {};
-      out += `S${i + 1}. Economy=${r.Economy || r.economy || ""}; Topic=${r.topic || ""}\n`;
+      
+      // This part looks for any field that contains "Score", "Overall", or "Points"
+      // so the AI can actually see the numeric results.
+      const dataPoints = Object.entries(r)
+        .filter(([k, v]) => 
+          k.toLowerCase().includes("score") || 
+          k.toLowerCase().includes("overall") || 
+          k.toLowerCase().includes("index") ||
+          typeof v === "number"
+        )
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ");
+
+      out += `S${i + 1}. Economy=${r.Economy || r.economy || ""}; Topic=${r.topic || ""}; ${dataPoints}\n`;
     });
     out += "\n";
   }
 
   if (econMatches && econMatches.length) {
-    out += "ECONOMY ANSWERS:\n";
+    out += "ECONOMY ANSWERS (Specific Details):\n";
     econMatches.forEach((m, i) => {
       const r = m.row || {};
       const resp = (r.response == null) ? "" : String(r.response);
       const snippet = resp.slice(0, 400);
       const tail = resp.length > 400 ? "..." : "";
-      out += `E${i + 1}. Economy=${r.economy || r.Economy || ""}; Topic=${r.topic || ""}; Var=${r.var || ""}; Q=${r.question || ""}; A=${snippet}${tail}\n`;
+      out += `E${i + 1}. Economy=${r.economy || r.Economy || ""}; Topic=${r.topic || ""}; Q=${r.question || ""}; A=${snippet}${tail}\n`;
     });
   }
 
   return out.trim();
 }
-
 async function callOpenAI(question, history, context) {
   const input = [
     {
