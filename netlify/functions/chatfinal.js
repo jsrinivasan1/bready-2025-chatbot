@@ -223,4 +223,17 @@ exports.handler = async (event) => {
     const msgForScoring = detectedEconomy ? message.replace(new RegExp(escapeRegExp(detectedEconomy), "ig"), " ") : message;
 
     const globalMatches = !detectedEconomy ? await searchGzJsonl(scorePath, "overall score", { maxRows: 10 }) : [];
-    const
+    const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, { maxRows: 50, economy: detectedEconomy });
+    const econMatches = await searchGzJsonl(econPath, msgForScoring, { maxRows: 40, economy: detectedEconomy, topic: detectedTopic });
+
+    let context = buildContext(econMatches, scoreMatches);
+    if (globalMatches.length > 0) {
+      context = "GLOBAL TOP PERFORMERS:\n" + buildContext([], globalMatches) + "\n\n" + context;
+    }
+
+    const answer = await callOpenAI(message, history, context);
+    return json(200, { answer });
+  } catch (e) {
+    return json(500, { error: e.message });
+  }
+};
