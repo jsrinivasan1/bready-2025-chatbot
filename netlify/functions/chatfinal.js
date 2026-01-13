@@ -23,13 +23,15 @@ const STOP = new Set([
   "which","give","show","list","tell","summarize","summary","compare","between","across","all","any","data","dataset",
   "topic","topics","economy","economies","please"
 ]);
-
 function tokenize(q) {
   return String(q || "")
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, " ")
     .split(" ")
-    .map((t) => t.trim())
+    .map((t) => {
+      const term = t.trim();
+      return SYNONYMS[term] || term; // Automatically converts "jobs" to "labor"
+    })
     .filter((t) => t.length >= 3 && !STOP.has(t));
 }
 
@@ -209,29 +211,18 @@ function buildContext(econMatches, scoreMatches) {
   return out.trim();
 }
 // --- Helper functions moved outside for cleaner syntax ---
-async function callOpenAI(question, history, context) {
-  const messages = [
+const messages = [
     {
       role: "system",
       content:
-        "You are a data-grounded assistant for the Business Ready 2025 dataset. " +
-        "Answer ONLY using the provided CONTEXT. " +
-        "When asked for scores across multiple topics or economies, ALWAYS use a Markdown Table. " +
-        "Columns should include: Economy, Topic, and Score/Value. " +
-        "If the context is insufficient, explain what is missing. " +
-        "Always cite facts using row IDs like (E3) or (S2)."
+        "You are a Senior Economic Analyst for Business Ready 2025. " +
+        "Your goal is to ANALYZE data, not just list it. " +
+        "If benchmarks are provided, compare the economy's performance against the top performers. " +
+        "Always use Markdown tables for multi-topic scores. " +
+        "If the user makes a typo (e.g., 'Angolla'), politely use the corrected economy name ('Angola'). " +
+        "Cite your sources using (S1, E2, etc.)."
     }
   ];
-
-  if (Array.isArray(history)) {
-    messages.push(...history.slice(-8));
-  }
-
-  messages.push({
-    role: "user",
-    content: `QUESTION:\n${question}\n\nCONTEXT:\n${context}`
-  });
-
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -274,14 +265,26 @@ async function loadEconSetOnce(scorePath) {
   globalThis.__ECON_SET__ = set;
   return set;
 }
-
 function pickEconomyFromQuestion(q, econSet) {
   const text = q.toLowerCase();
-  const tail = text.match(/\b(?:for|in|of)\s+([a-z][a-z\s\.\-']{2,})\s*\??\s*$/i);
-  if (tail) {
-    const cand = tail[1].trim().toLowerCase();
-    if (econSet.has(cand)) return cand;
+  
+  // 1. Try Exact Match
+  let bestMatch = "";
+  for (const econ of econSet) {
+    if (text.includes(econ) && econ.length > bestMatch.length) bestMatch = econ;
   }
+  if (bestMatch) return bestMatch;
+
+  // 2. Fuzzy Match for Typos
+  const words = text.split(/\s+/);
+  for (const word of words) {
+    if (word.length < 4) continue;
+    for (const econ of econSet) {
+      if (getSimilarity(word, econ) > 0.85) return econ; // 85% match threshold
+    }
+  }
+  return null;
+}
   const vs = text.match(/([a-z][a-z\s\.\-']{2,})\s+(?:vs\.?|versus|and)\s+([a-z][a-z\s\.\-']{2,})/i);
   if (vs) {
     const a = vs[1].trim().toLowerCase();
@@ -355,12 +358,24 @@ exports.handler = async (event) => {
     }
 
     // ✅ NEW CODE
-const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
-  maxRows: 50, // Grab more rows to see all topics
-  minScore: 1,
-  economy: detectedEconomy 
-  // Notice 'topic: detectedTopic' is REMOVED so we get ALL topics for the country
-});
+const econSet = await loadEconSetOnce(scorePath);
+    const detectedEconomy = pickEconomyFromQuestion(message, econSet);
+    
+    // NEW: If no specific country is asked, grab the top 10 globally as a benchmark
+    const globalMatches = !detectedEconomy ? await searchGzJsonl(scorePath, "overall score", { maxRows: 10 }) : [];
+
+    // UPDATED: Search for the specific user request
+    const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
+      maxRows: 50,
+      minScore: 0.5, // Lower threshold to allow more results for comparison
+      economy: detectedEconomy
+    });
+
+    // NEW: Merge global context with specific context so the AI can analyze
+    let context = buildContext(econMatches, scoreMatches);
+    if (globalMatches.length > 0) {
+      context = "GLOBAL TOP PERFORMERS (FOR COMPARISON):\n" + buildContext([], globalMatches) + "\n\n" + context;
+    }
     const econMatches = await searchGzJsonl(econPath, msgForScoring, {
       maxRows: 40,
       minScore: 1,
