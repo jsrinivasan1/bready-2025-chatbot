@@ -4,7 +4,7 @@ const zlib = require("zlib");
 const readline = require("readline");
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 
 function json(statusCode, obj) {
   return {
@@ -116,8 +116,9 @@ async function getTopicScoreRow(scorePath, economyName, topicName) {
 async function searchGzJsonl(filePath, query, opts) {
   opts = opts || {};
   const tokens = tokenize(query);
+  const isRankingQuery = /top|best|highest|rank|leader|highest\s+score/i.test(query);
   const maxRows = opts.maxRows || 30;
-  const minScore = opts.minScore || 1;
+  const minScore = isRankingQuery ? 0 : (opts.minScore || 1); // Allow all rows if we are ranking
 
   const best = [];
   const { rl } = openGzLineReader(filePath);
@@ -125,11 +126,10 @@ async function searchGzJsonl(filePath, query, opts) {
   return await new Promise((resolve, reject) => {
     rl.on("line", (line) => {
       if (!line) return;
-
       let row;
       try { row = JSON.parse(line); } catch { return; }
 
-      // Hard filters
+      // Filters
       if (opts.topic) {
         const rt = (row.topic || "").toString().toLowerCase();
         if (rt && rt !== String(opts.topic).toLowerCase()) return;
@@ -139,15 +139,29 @@ async function searchGzJsonl(filePath, query, opts) {
         if (re && re !== String(opts.economy).toLowerCase()) return;
       }
 
+      // 1. Calculate Keyword Relevance
       const hay = [
-        row.economy, row.Economy, row.topic, row.var, row.question, row.response,
-        row["Economy Code"], row["Business Location Overall"], row["Business Entry Overall"]
+        row.economy, row.Economy, row.topic, row.var, row.question, row.response
       ].filter(Boolean).join(" | ");
+      const keywordScore = scoreText(hay, tokens);
 
-      const s = scoreText(hay, tokens);
-      if (s < minScore) return;
+      // 2. Extract Numeric Score for Sorting
+      // Looks for keys like "Overall Score" or "Business Location Overall"
+      const numericValue = parseFloat(
+        row["Business Location Overall"] || 
+        row["Business Entry Overall"] || 
+        row["Overall Score"] || 0
+      );
 
-      best.push({ score: s, row });
+      // 3. Decide Rank: If user asks for "top", prioritize the numericValue. 
+      // Otherwise, prioritize the keyword match.
+      const finalSortScore = isRankingQuery ? numericValue : keywordScore;
+
+      if (!isRankingQuery && finalSortScore < minScore) return;
+
+      best.push({ score: finalSortScore, row });
+      
+      // Keep the highest scores at the top
       best.sort((a, b) => b.score - a.score);
       if (best.length > maxRows) best.pop();
     });
@@ -156,7 +170,6 @@ async function searchGzJsonl(filePath, query, opts) {
     rl.on("error", reject);
   });
 }
-
 function buildContext(econMatches, scoreMatches) {
   let out = "";
 
@@ -195,32 +208,40 @@ function buildContext(econMatches, scoreMatches) {
 
   return out.trim();
 }
+// --- Helper functions moved outside for cleaner syntax ---
 async function callOpenAI(question, history, context) {
-  const input = [
+  const messages = [
     {
       role: "system",
       content:
         "You are a data-grounded assistant for the Business Ready 2025 dataset. " +
         "Answer ONLY using the provided CONTEXT. " +
-        "If the context is insufficient, say what is missing and suggest a more specific question. " +
-        "When you use a fact, cite row IDs like (E3) or (S2)."
+        "When asked for scores across multiple topics or economies, ALWAYS use a Markdown Table. " +
+        "Columns should include: Economy, Topic, and Score/Value. " +
+        "If the context is insufficient, explain what is missing. " +
+        "Always cite facts using row IDs like (E3) or (S2)."
     }
   ];
 
-  if (Array.isArray(history)) input.push(...history.slice(-8));
+  if (Array.isArray(history)) {
+    messages.push(...history.slice(-8));
+  }
 
-  input.push({
+  messages.push({
     role: "user",
     content: `QUESTION:\n${question}\n\nCONTEXT:\n${context}`
   });
 
-  const resp = await fetch("https://api.openai.com/v1/responses", {
+  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ model: OPENAI_MODEL, input })
+    body: JSON.stringify({ 
+      model: OPENAI_MODEL, 
+      messages: messages 
+    })
   });
 
   if (!resp.ok) {
@@ -229,20 +250,10 @@ async function callOpenAI(question, history, context) {
   }
 
   const data = await resp.json();
-  const parts = [];
-  if (Array.isArray(data.output)) {
-    for (const item of data.output) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        for (const c of item.content) {
-          if (c.type === "output_text" && c.text) parts.push(c.text);
-        }
-      }
-    }
-  }
-  return parts.join("\n").trim() || "(No text output)";
+  
+  // Modern OpenAI responses store the text in choices[0].message.content
+  return data.choices?.[0]?.message?.content?.trim() || "(No text output)";
 }
-// --- Helper functions moved outside for cleaner syntax ---
-
 async function loadEconSetOnce(scorePath) {
   if (globalThis.__ECON_SET__) return globalThis.__ECON_SET__;
   const set = new Set();
@@ -343,13 +354,13 @@ exports.handler = async (event) => {
       });
     }
 
-    const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
-      maxRows: 10,
-      minScore: 1,
-      economy: detectedEconomy,
-      topic: detectedTopic
-    });
-
+    // ✅ NEW CODE
+const scoreMatches = await searchGzJsonl(scorePath, msgForScoring, {
+  maxRows: 50, // Grab more rows to see all topics
+  minScore: 1,
+  economy: detectedEconomy 
+  // Notice 'topic: detectedTopic' is REMOVED so we get ALL topics for the country
+});
     const econMatches = await searchGzJsonl(econPath, msgForScoring, {
       maxRows: 40,
       minScore: 1,
