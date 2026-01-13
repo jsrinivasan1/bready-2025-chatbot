@@ -282,16 +282,6 @@ async function loadEconSetOnce() {
   return set;
 }
 
-function pickEconomyFromQuestion(q, econSet) {
-  const text = q.toLowerCase();
-
-  // Prefer "for X" / "in X" / "of X" at the END of the question
-  const tail = text.match(/\b(?:for|in|of)\s+([a-z][a-z\s\.\-']{2,})\s*\??\s*$/i);
-  if (tail) {
-    const cand = tail[1].trim().toLowerCase();
-    if (econSet.has(cand)) return cand;
-  }
-
   // Also handle "X vs Y" / "X and Y" patterns (return first; compare can be added later)
   const vs = text.match(/([a-z][a-z\s\.\-']{2,})\s+(?:vs\.?|versus|and)\s+([a-z][a-z\s\.\-']{2,})/i);
   if (vs) {
@@ -310,7 +300,6 @@ function pickEconomyFromQuestion(q, econSet) {
   return best || null;
 }
 
-const detectedEconomy = pickEconomyFromQuestion(message, econSet);
 
 // For scoring, remove the detected economy phrase (if any)
 const msgForScoring = detectedEconomy
@@ -375,6 +364,7 @@ function pickEconomyFromQuestion(q, econSet) {
 }
 
 const econSet = await loadEconSetOnce();
+const detectedEconomy = pickEconomyFromQuestion(message, econSet);
 
 // For scoring, remove the detected economy phrase (if any)
 
